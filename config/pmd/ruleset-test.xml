@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<ruleset name="mailkube-spring-boot-test"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>
+    Tests keep the complexity and dead-code rules but not the documentation one: a test method's
+    name is its documentation.
+
+    This restates its rules rather than referencing ruleset.xml and excluding one, which would be
+    the DRY form. PMD resolves a `ref` against the CLASSPATH, not against the referencing file, so
+    `ref="config/pmd/ruleset.xml"`, `"./ruleset.xml"` and `"ruleset.xml"` all fail — and they fail
+    the way this toolchain always fails: PMD logs "Cannot load ruleset", analyzes nothing, and the
+    build goes GREEN. All three were tried. Do not "fix" this without checking the pmdTest output.
+  </description>
+
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+    <properties>
+      <property name="methodReportLevel" value="10"/>
+      <property name="classReportLevel" value="80"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"/>
+  <rule ref="category/java/errorprone.xml/EmptyCatchBlock"/>
+</ruleset>

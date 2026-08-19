@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<ruleset name="mailkube-spring-boot"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>
+    The KISS, ISP and documentation gates for main sources.
+
+    WARNING: a ruleset that fails to load does NOT fail the build. PMD prints
+    "Cannot load ruleset ... XML validation errors occurred", then "No files to analyze", and
+    Gradle reports success with the gate silently switched off. After editing this file, check
+    the pmdMain output for those lines: a green build is not proof the rules ran.
+  </description>
+
+  <!-- KISS: the house limits, stated rather than inherited. -->
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+    <properties>
+      <property name="methodReportLevel" value="10"/>
+      <property name="classReportLevel" value="80"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/design.xml/CognitiveComplexity">
+    <properties>
+      <property name="reportLevel" value="20"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/design.xml/NPathComplexity"/>
+  <rule ref="category/java/design.xml/ExcessiveParameterList">
+    <properties>
+      <!-- A send verb takes one parameter per API field via its builder; the builder itself is
+           what keeps call sites readable, so the raw count is not the signal here. -->
+      <property name="minimum" value="12"/>
+    </properties>
+  </rule>
+
+  <!-- ISP: an unused parameter means the abstraction is wider than its caller needs. -->
+  <rule ref="category/java/bestpractices.xml/UnusedFormalParameter"/>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"/>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateField"/>
+
+  <!-- Documentation: every public type and method carries Javadoc. -->
+  <rule ref="category/java/documentation.xml/CommentRequired">
+    <properties>
+      <property name="fieldCommentRequirement" value="ignored"/>
+      <property name="protectedMethodCommentRequirement" value="ignored"/>
+    </properties>
+  </rule>
+
+  <!-- Correctness rules that cover the ground Error Prone would, without hooking javac. -->
+  <rule ref="category/java/errorprone.xml/CloseResource"/>
+  <rule ref="category/java/errorprone.xml/CompareObjectsWithEquals"/>
+  <rule ref="category/java/errorprone.xml/EmptyCatchBlock"/>
+</ruleset>

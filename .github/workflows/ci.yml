@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    # `develop` only, and `main` is absent on purpose. `develop` is the integration branch and is
+    # pushed to directly, so without this trigger a direct push would run nothing — `pull_request`
+    # alone does not cover it. `main` is covered instead by release.yml, which runs this whole
+    # workflow through `workflow_call` as its `ci-gate` job before releasing. Adding `main` here
+    # would put that gate run and a standalone push run in the same `ci-${{ github.ref }}`
+    # concurrency group, where one is cancelled — and the cancelled one is what the README's CI
+    # badge reports.
+    branches: [develop]
+  pull_request:
+  workflow_call: # so release.yml can gate on the full CI
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# NOTE: this file is copied WITHOUT rendering (GitHub's ${{ }} collides with Jinja), so it must
+# contain no cookiecutter tokens. Every project-specific value below is either read out of a
+# rendered manifest at run time or hard-coded and pinned by a test. See .rules/CI_GATES.md.
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The framework version is a matrix axis of its own, separate from the language version.
+        #
+        # The floor is 3.5.0 and it is DERIVED, not chosen: Boot 3.4 pins spring-core 6.2.0, whose
+        # bundled ASM cannot parse Java 25 class files (major 69), so every context fails to start
+        # with "ASM ClassReader failed to parse class file". 3.5.0 pins 6.2.7, which can.
+        #
+        # No leg is excluded: every Boot line here ships bytecode 17 and runs on Java 25, so the
+        # contract's "exclude a leg whose framework major raises the language floor" clause is
+        # satisfied vacuously. Said explicitly because an empty exclusion list otherwise reads as an
+        # oversight. See .rules/SPRING_BOOT_INTEGRATION.md.
+        spring-boot-version: ["3.5.0", "4.0.7", "4.1.0"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # Read from the rendered build file rather than hard-coded, so this cannot drift from the
+          # toolchain the project actually declares.
+          java-version-file: .java-version
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Format check (spotless — palantir-java-format)
+        run: ./gradlew spotlessCheck
+
+      - name: Build, lint, test and gate coverage
+        # `check` runs pmdMain, pmdTest, test and jacocoTestCoverageVerification.
+        run: ./gradlew check -PspringBootVersion=${{ matrix.spring-boot-version }}
+
+      - name: Javadoc
+        run: ./gradlew javadoc
+
+  build:
+    # Publish readiness. The release publishes AFTER the tag and the GitHub Release already exist,
+    # and Maven Central refuses a re-upload, so a POM or artifact-assembly failure there strands a
+    # tagged version. See .rules/CI_GATES.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version-file: .java-version
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Publish readiness (publishToMavenLocal)
+        run: ./gradlew publishToMavenLocal -Pversion=0.0.0-ci
+
+      - name: The SDK must be a COMPILE-scope dependency of the published POM
+        # This starter HAS runtime dependencies, unlike the SDK. A `compileOnly` slip publishes a
+        # starter that resolves to nothing on a consumer's classpath, and that is invisible until
+        # after the tag exists. The artifact id is read out of the rendered settings file rather
+        # than hard-coded here, because this workflow ships unrendered.
+        run: |
+          set -euo pipefail
+          artifact=$(sed -n 's/^rootProject.name = "\(.*\)"$/\1/p' settings.gradle.kts)
+          pom=$(find ~/.m2/repository -name "${artifact}-0.0.0-ci.pom" | head -1)
+          test -n "$pom"
+          python3 - "$pom" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+          root = ET.parse(sys.argv[1]).getroot()
+          deps = {
+              d.findtext("m:artifactId", "", ns): (d.findtext("m:scope", "compile", ns))
+              for d in root.iterfind("m:dependencies/m:dependency", ns)
+          }
+          sdk = [a for a in deps if a.startswith("mailkube-")]
+          assert sdk, f"the SDK is absent from the published POM: {sorted(deps)}"
+          for a in sdk:
+              assert deps[a] == "compile", f"{a} is scope {deps[a]}, expected compile"
+          print("SDK at compile scope:", sdk)
+          PY
+
+      - name: The jar must reserve the JPMS module name
+        # There is deliberately no module-info.java (every Spring dependency is an automatic module
+        # and jlink refuses those), so Automatic-Module-Name is what keeps the SDK's namespace
+        # unsplit. If it goes missing, nothing fails until two mailkube jars meet on a module path.
+        run: |
+          set -euo pipefail
+          artifact=$(sed -n 's/^rootProject.name = "\(.*\)"$/\1/p' settings.gradle.kts)
+          jar=$(find ~/.m2/repository -name "${artifact}-0.0.0-ci.jar" | head -1)
+          unzip -p "$jar" META-INF/MANIFEST.MF | grep -q 'Automatic-Module-Name'
+
+      - name: The jar must ship the code and nothing else
+        # CI_GATES.md asks that the artifact's SHAPE be asserted, not its build configuration: an
+        # include list that silently drifts and an artifact that ships the repo look identical
+        # until a consumer unzips it. Asserted as an outcome, on the jar that was actually built.
+        #
+        # `spring-configuration-metadata.json` is asserted PRESENT for the same reason in reverse:
+        # it is generated by an annotation processor, it is the entire point of wiring
+        # `spring-boot-configuration-processor`, and if the processor stops running nothing else
+        # in this build goes red — the consumer just quietly loses IDE completion on `mailkube.*`.
+        run: |
+          set -euo pipefail
+          artifact=$(sed -n 's/^rootProject.name = "\(.*\)"$/\1/p' settings.gradle.kts)
+          jar=$(find ~/.m2/repository -name "${artifact}-0.0.0-ci.jar" | head -1)
+          test -n "$jar"
+          listing=$(unzip -Z1 "$jar")
+          echo "$listing"
+          for unwanted in 'Test\.class$' '^\.github/' '^\.rules/' '^src/' '^config/' '^scripts/'; do
+            if echo "$listing" | grep -qE "$unwanted"; then
+              echo "the jar ships something it must not: $unwanted" >&2
+              exit 1
+            fi
+          done
+          echo "$listing" | grep -q '^META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports$'
+          echo "$listing" | grep -q '^META-INF/spring-configuration-metadata.json$'
+
+      - name: Promote-step readiness (the half of the release no local build can exercise)
+        run: |
+          test -x scripts/promote-central.sh
+          bash -n scripts/promote-central.sh
+          grep -q 'promote-central.sh' .releaserc.json
+
+  floor:
+    # The dependency-floor gate. Unlike the SDK, this starter HAS runtime dependencies, so the
+    # "no floor job needed" comment does not apply here. Gradle has no `--prefer-lowest`, so the
+    # build forces each declared lower bound under `-PdependencyFloor`.
+    #
+    # Without this, the `>= ` bounds in the published POM are fiction: every other leg resolves
+    # something newer, and the first consumer on the floor is the one who finds out.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version-file: .java-version
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Resolve every dependency down to its declared floor, then run the suite
+        # `-PspringBootVersion` is passed explicitly even though 3.5.0 is also the default: the
+        # floor must be stated by the gate, not inherited from a default that a later change to
+        # the build file could move without anyone noticing here.
+        run: ./gradlew test -PdependencyFloor -PspringBootVersion=3.5.0
+
+  # There is deliberately NO example-compilation job: an integration ships no `examples/`, because
+  # every entry point here needs a host application before it can run. The wiring lives in the
+  # README instead. This comment exists because a gate that does not apply and a gate somebody
+  # forgot look identical six months later. See .rules/INTEGRATION_CONTRACT.md.
+  #
+  # There is also no separate job for the second install shape (no `spring-web`): Boot's
+  # FilteredClassLoader removes the package in-process, so `AutoConfigurationTest` proves it inside
+  # the normal suite and a job would be ceremony.
+
+  dry:
+    # Language-agnostic duplication (DRY) gate — identical across every mailkube repo.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Copy-paste detection (jscpd)
+        run: npx --yes jscpd@4 --config .jscpd.json .
+
+  docs:
+    # Governance gate: every .rules/*.md must be indexed in AGENTS.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rule-index sync check
+        run: ./scripts/check-rule-index.sh

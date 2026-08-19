@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    # `develop`, matching ci.yml's push trigger. Without this dependabot targets the default
+    # branch, and a PR opened against `main` runs no CI at all: ci.yml is `push: [develop]` plus
+    # `pull_request`, and `main` is covered only by release.yml's ci-gate. That failure is silent —
+    # the PR simply shows no checks — which is why it is pinned here rather than left to the
+    # default. See CONTRIBUTING.md on the branching model.
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"

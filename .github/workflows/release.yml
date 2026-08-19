@@ -1,0 +1,84 @@
+name: Release
+
+# Conventional-Commits-driven release: one tag + one GitHub Release, then a signed publish to
+# Maven Central. NOTHING is committed back to `main`; see .rules/RELEASE.md.
+#
+# Maven Central is the ONE registry in this SDK family with no OIDC trusted publishing, so unlike
+# PyPI, npm and RubyGems this job needs long-lived secrets: a Central Portal token and a GPG key.
+# See .rules/RELEASE.md for how to create them.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci-gate:
+    # Release only proceeds if the full gated CI (test + dry + docs) is green.
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      # A job-level `permissions:` block REPLACES the default token scopes rather than adding
+      # to them, so every scope semantic-release needs must be listed here.
+      # `@semantic-release/github` comments on the issues and PRs a release resolves and labels
+      # them `released`; without `issues`/`pull-requests` that call 403s and turns the run red
+      # AFTER the tag and the GitHub Release have already been created. See .rules/CI_GATES.md.
+      contents: write # push the tag, create the GitHub Release
+      issues: write # release comment on resolved issues
+      pull-requests: write # release comment + `released` label on resolved PRs
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # Read from `.java-version`, exactly as every ci.yml job does, so the release cannot
+          # silently build on a different JDK than the one CI gated.
+          java-version-file: .java-version
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      # One step does everything, and only when the commits actually warrant a release:
+      # semantic-release creates the tag and the GitHub Release, and its `publishCmd` runs
+      # `./gradlew publish -Pversion=X.Y.Z` and then promotes the resulting staging repository
+      # to the Portal. Nothing is written to the tree, so there is no `@semantic-release/git`
+      # and no commit to `main`. Publishing from `publishCmd` rather than a following workflow
+      # step is what keeps a non-releasing push to `main` from uploading the `0.0.0` placeholder
+      # to Central, which cannot be undone — and it is also what keeps the promote on the same
+      # runner as the upload, which the OSSRH Staging API requires. See .rules/RELEASE.md.
+      #
+      # The secrets are on the whole step because `publishCmd` inherits its environment.
+      # The semantic-release major is pinned on purpose: this repo can sit untouched for
+      # months and an unpinned `npx` resolves @latest at run time. Dependabot cannot see
+      # this dependency — there is no manifest — so bumping it is a manual task.
+      - name: Release (semantic-release — tag, GitHub Release, signed publish to Maven Central)
+        run: >-
+          npx --yes
+          -p semantic-release@24
+          -p @semantic-release/exec
+          semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSPHRASE }}
+          ORG_GRADLE_PROJECT_centralUsername: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          ORG_GRADLE_PROJECT_centralPassword: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          # The same two secrets again, under their own names, for the promote step that follows the
+          # Gradle upload inside `publishCmd`. Deliberately not reusing the ORG_GRADLE_PROJECT_
+          # pair: that prefix is Gradle's property-injection convention, and a shell script reading
+          # it would be borrowing a contract that belongs to another tool.
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}

@@ -1,0 +1,46 @@
+# Run `pre-commit install && pre-commit install --hook-type commit-msg` after cloning.
+# Requires a JDK 25 and Node (for jscpd) on PATH.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # The Gradle wrapper jar is committed on purpose; it is what makes the build reproducible.
+        args: ["--maxkb=200"]
+
+  - repo: local
+    hooks:
+      - id: spotless
+        name: spotless (format)
+        entry: ./gradlew spotlessApply
+        language: system
+        types: [java]
+        pass_filenames: false
+      - id: gradle-check
+        name: gradle check (pmd + tests + coverage)
+        entry: ./gradlew check
+        language: system
+        types: [java]
+        pass_filenames: false
+
+  # Language-agnostic DRY gate — identical config in every mailkube repo.
+  - repo: local
+    hooks:
+      - id: jscpd
+        name: jscpd (copy-paste detector)
+        entry: npx --yes jscpd@4 --config .jscpd.json .
+        language: system
+        pass_filenames: false
+
+  # Enforce Conventional Commits on the commit message (matches the org house style).
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.22.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies:
+          - "@commitlint/config-conventional"

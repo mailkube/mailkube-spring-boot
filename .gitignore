@@ -1,0 +1,17 @@
+# Build output
+/build/
+/.gradle/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Tooling caches
+.jscpd/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Secrets / local config
+.env
