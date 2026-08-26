@@ -4,7 +4,7 @@ plugins {
     signing
     jacoco
     pmd
-    id("com.diffplug.spotless") version "8.9.0"
+    id("com.diffplug.spotless") version "8.10.0"
 }
 
 group = "com.mailkube"
@@ -54,7 +54,7 @@ dependencies {
     // and IT is the one that needs jakarta.mail. See .rules/SPRING_BOOT_INTEGRATION.md.
     api(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
     api("org.springframework:spring-context-support")
-    api("com.mailkube:mailkube-java:1.1.0")
+    api("com.mailkube:mailkube-java:1.2.0")
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
@@ -85,7 +85,7 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit.jupiter:junit-jupiter-params")
-    testImplementation("org.assertj:assertj-core:3.27.6")
+    testImplementation("org.assertj:assertj-core:3.27.7")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -109,7 +109,7 @@ dependencies {
 if (providers.gradleProperty("dependencyFloor").isPresent) {
     configurations.configureEach {
         resolutionStrategy {
-            force("com.mailkube:mailkube-java:1.1.0")
+            force("com.mailkube:mailkube-java:1.2.0")
         }
     }
 }
@@ -256,8 +256,8 @@ publishing {
                 }
                 developers {
                     developer {
-                        name = "Mailtactic, Corp."
-                        organization = "Mailtactic, Corp."
+                        name = "Mail Tactic Corporation"
+                        organization = "Mail Tactic Corporation"
                     }
                 }
                 scm {
