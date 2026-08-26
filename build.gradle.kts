@@ -4,7 +4,7 @@ plugins {
     signing
     jacoco
     pmd
-    id("com.diffplug.spotless") version "8.9.0"
+    id("com.diffplug.spotless") version "8.10.0"
 }
 
 group = "com.mailkube"
