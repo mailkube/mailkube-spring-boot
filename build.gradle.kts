@@ -256,8 +256,8 @@ publishing {
                 }
                 developers {
                     developer {
-                        name = "Mailtactic, Corp."
-                        organization = "Mailtactic, Corp."
+                        name = "Mail Tactic Corporation"
+                        organization = "Mail Tactic Corporation"
                     }
                 }
                 scm {
