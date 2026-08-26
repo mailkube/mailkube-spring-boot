@@ -54,7 +54,7 @@ dependencies {
     // and IT is the one that needs jakarta.mail. See .rules/SPRING_BOOT_INTEGRATION.md.
     api(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
     api("org.springframework:spring-context-support")
-    api("com.mailkube:mailkube-java:1.1.0")
+    api("com.mailkube:mailkube-java:1.2.0")
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
@@ -109,7 +109,7 @@ dependencies {
 if (providers.gradleProperty("dependencyFloor").isPresent) {
     configurations.configureEach {
         resolutionStrategy {
-            force("com.mailkube:mailkube-java:1.1.0")
+            force("com.mailkube:mailkube-java:1.2.0")
         }
     }
 }
