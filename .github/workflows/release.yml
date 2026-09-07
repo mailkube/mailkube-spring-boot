@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           # Read from `.java-version`, exactly as every ci.yml job does, so the release cannot
