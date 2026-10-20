@@ -6,11 +6,13 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-purple.svg)](CODE_OF_CONDUCT.md)
 
-Spring Boot starter for mailkube.
+Spring Boot starter for [mailkube](https://mailkube.com).
 
 Send mail through Spring's own `MailSender`, and receive webhooks as Spring application events. This
 starter is a thin adapter over [`mailkube-java`](https://central.sonatype.com/artifact/com.mailkube/mailkube-java):
 the API, retries, errors and signature verification all live there.
+
+Full product and API documentation: [docs.mailkube.com/sdks/spring-boot](https://docs.mailkube.com/sdks/spring-boot).
 
 ## Requirements
 
